@@ -1,0 +1,199 @@
+{% extends "base.html" %}
+{% block title %}Reports — AgriChain CRM{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1 class="page-title">Reports</h1>
+</div>
+
+{% set stage_colors = {'New Lead':'#4A7FA5','Pending':'#D97706','SAL':'#A8D86E','Out':'#E53935','Demo':'#173347','Close Won':'#6AAE20','Close Lost':'#F9A825'} %}
+{% set max_count = funnel | map(attribute='count') | max %}
+
+<!-- Section 1: Lead Funnel -->
+<div class="card report-section" style="margin-bottom:1.5rem;">
+  <div class="card-header" style="background:var(--bg);border-radius:var(--radius) var(--radius) 0 0;">
+    <h2 class="card-title">Lead Funnel</h2>
+    <a href="{{ url_for('reports.board', view='funnel') }}" class="view-board-btn">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px;"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+      View Board
+    </a>
+  </div>
+  <p class="report-desc">Track how leads progress through each stage of your funnel.</p>
+  <div class="funnel-bars" style="padding:0 1.5rem 1rem;">
+    {% for item in funnel %}
+    <a href="{{ url_for('reports.board', view='stage', filter=item.stage) }}" class="funnel-bar-row" style="text-decoration:none;color:inherit;">
+      <span class="funnel-stage-label">{{ item.stage }}</span>
+      <div class="funnel-bar-wrap">
+        <div class="funnel-bar" style="width:{{ ((item.count/(max_count or 1))*100)|round }}%;background:{{ stage_colors.get(item.stage,'#999') }};"></div>
+      </div>
+      <span class="funnel-count">{{ item.count }}</span>
+    </a>
+    {% endfor %}
+  </div>
+  <div class="table-wrap">
+    <table class="data-table">
+      <thead><tr><th>Stage</th><th>Count</th><th>% of Total</th><th>Avg Days in Stage</th><th></th></tr></thead>
+      <tbody>
+        {% for item in funnel %}
+        <tr style="cursor:pointer;" onclick="window.location='{{ url_for('reports.board', view='stage', filter=item.stage) }}'">
+          <td><span class="status-pill status-{{ item.stage|replace(' ','-')|lower }}" style="font-size:0.75rem;">{{ item.stage }}</span></td>
+          <td>{{ item.count }}</td>
+          <td>{{ item.pct }}%</td>
+          <td>{{ item.avg_days }}</td>
+          <td><a href="{{ url_for('reports.board', view='stage', filter=item.stage) }}" class="view-board-btn" style="display:inline-flex;">View</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Section 2: Source Performance -->
+<div class="card report-section" style="margin-bottom:1.5rem;">
+  <div class="card-header" style="background:var(--bg);border-radius:var(--radius) var(--radius) 0 0;">
+    <h2 class="card-title">Source Performance</h2>
+    <a href="{{ url_for('reports.board', view='source') }}" class="view-board-btn">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px;"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+      View Board
+    </a>
+  </div>
+  {% if source_data %}
+  <div class="table-wrap">
+    <table class="data-table">
+      <thead><tr><th>Source</th><th>Total Leads</th><th>SAL</th><th>Demo</th><th>Close Won</th><th>Close Lost</th><th>Conversion Rate</th><th></th></tr></thead>
+      <tbody>
+        {% for s in source_data %}
+        <tr style="cursor:pointer;" onclick="window.location='{{ url_for('reports.board', view='source', filter=s.channel) }}'">
+          <td><span class="badge badge-source">{{ s.channel }}</span></td>
+          <td>{{ s.total }}</td>
+          <td>{{ s.sal }}</td>
+          <td>{{ s.demo }}</td>
+          <td><strong>{{ s.won }}</strong></td>
+          <td>{{ s.lost }}</td>
+          <td>
+            <div style="display:flex;align-items:center;gap:0.5rem;">
+              <div class="mini-bar-wrap"><div class="mini-bar" style="width:{{ s.conv_rate }}%;background:#6AAE20;"></div></div>
+              {{ s.conv_rate }}%
+            </div>
+          </td>
+          <td><a href="{{ url_for('reports.board', view='source', filter=s.channel) }}" class="view-board-btn" style="display:inline-flex;">View</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="text-muted" style="padding:1.5rem;">No source data yet.</p>
+  {% endif %}
+</div>
+
+<!-- Section 3: Team Performance -->
+<div class="card report-section" style="margin-bottom:1.5rem;">
+  <div class="card-header" style="background:var(--bg);border-radius:var(--radius) var(--radius) 0 0;">
+    <h2 class="card-title">Team Performance</h2>
+    <a href="{{ url_for('reports.board', view='team') }}" class="view-board-btn">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px;"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+      View Board
+    </a>
+  </div>
+  {% if team_data %}
+  <div class="table-wrap">
+    <table class="data-table">
+      <thead><tr><th>Manager</th><th>Total</th><th>SAL</th><th>Demo</th><th>Close Won</th><th>Close Lost</th><th>Win Rate</th><th>Avg Days to Close</th><th></th></tr></thead>
+      <tbody>
+        {% for t in team_data %}
+        <tr style="cursor:pointer;" onclick="window.location='{{ url_for('reports.board', view='team', filter=t.manager) }}'">
+          <td class="fw-500">{{ t.manager }}</td>
+          <td>{{ t.total }}</td>
+          <td>{{ t.sal }}</td>
+          <td>{{ t.demo }}</td>
+          <td><strong>{{ t.won }}</strong></td>
+          <td>{{ t.lost }}</td>
+          <td>{{ t.win_rate }}%</td>
+          <td>{{ t.avg_days_close }}</td>
+          <td><a href="{{ url_for('reports.board', view='team', filter=t.manager) }}" class="view-board-btn" style="display:inline-flex;">View</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="text-muted" style="padding:1.5rem;">No team data yet.</p>
+  {% endif %}
+</div>
+
+<!-- Section 4: Activity Report -->
+<div class="card report-section" style="margin-bottom:1.5rem;">
+  <div class="card-header" style="background:var(--bg);border-radius:var(--radius) var(--radius) 0 0;">
+    <h2 class="card-title">Activity Report</h2>
+  </div>
+  <div style="padding:1rem 1.5rem;border-bottom:1px solid var(--border);">
+    <form method="GET" class="filter-form">
+      <input type="date" name="date_from" value="{{ date_from_str }}" class="form-input" style="width:auto;"/>
+      <input type="date" name="date_to" value="{{ date_to_str }}" class="form-input" style="width:auto;"/>
+      <select name="user_filter" class="form-select filter-select">
+        <option value="">All Users</option>
+        {% for u in users %}<option value="{{ u }}" {% if user_filter==u %}selected{% endif %}>{{ u }}</option>{% endfor %}
+      </select>
+      <input type="text" name="action_filter" value="{{ action_filter }}" placeholder="Filter by action…" class="form-input filter-input"/>
+      <button type="submit" class="btn btn-secondary">Filter</button>
+    </form>
+  </div>
+  <div class="table-wrap">
+    <table class="data-table">
+      <thead><tr><th>Date</th><th>User</th><th>Action</th><th>Entity</th><th>Details</th></tr></thead>
+      <tbody>
+        {% for log in activity_logs %}
+        <tr>
+          <td class="text-sm text-muted">{{ log.created_at.strftime('%d %b %Y %H:%M') }}</td>
+          <td>{{ log.user }}</td>
+          <td>{{ log.action }}</td>
+          <td>
+            {% if log.entity_type and log.entity_id %}
+              {% if log.entity_type == 'lead' %}<a href="{{ url_for('leads.detail', lead_id=log.entity_id) }}" class="table-link">{{ log.entity_name }}</a>
+              {% elif log.entity_type == 'contact' %}<a href="{{ url_for('contacts.detail', contact_id=log.entity_id) }}" class="table-link">{{ log.entity_name }}</a>
+              {% elif log.entity_type == 'company' %}<a href="{{ url_for('companies.detail', company_id=log.entity_id) }}" class="table-link">{{ log.entity_name }}</a>
+              {% else %}{{ log.entity_name }}{% endif %}
+            {% else %}—{% endif %}
+          </td>
+          <td class="text-sm text-muted">{{ log.details or '—' }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5" class="text-center text-muted py-4">No activity found.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Section 5: Funnel Leak Analysis -->
+<div class="card report-section">
+  <div class="card-header" style="background:var(--bg);border-radius:var(--radius) var(--radius) 0 0;">
+    <h2 class="card-title">Funnel Leak Analysis</h2>
+    <a href="{{ url_for('reports.board') }}" class="view-board-btn">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px;"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+      View All
+    </a>
+  </div>
+  <div class="table-wrap">
+    <table class="data-table">
+      <thead><tr><th>Stage</th><th>Entered</th><th>Progressed</th><th>Dropped</th><th>Drop Rate</th></tr></thead>
+      <tbody>
+        {% for l in leak_data %}
+        <tr style="cursor:pointer;" onclick="window.location='{{ url_for('reports.board', view='stage', filter=l.stage) }}'">
+          <td><span class="status-pill status-{{ l.stage|replace(' ','-')|lower }}" style="font-size:0.75rem;">{{ l.stage }}</span></td>
+          <td>{{ l.entered }}</td>
+          <td>{{ l.progressed }}</td>
+          <td>{{ l.dropped }}</td>
+          <td>
+            <div style="display:flex;align-items:center;gap:0.5rem;">
+              <div class="mini-bar-wrap"><div class="mini-bar" style="width:{{ l.drop_rate }}%;background:{% if l.drop_rate > 50 %}#E53935{% elif l.drop_rate > 25 %}#F9A825{% else %}#6AAE20{% endif %};"></div></div>
+              {{ l.drop_rate }}%
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

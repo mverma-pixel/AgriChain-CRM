@@ -1,0 +1,188 @@
+{% extends "base.html" %}
+{% block title %}{{ company.name }} — AgriChain CRM{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div style="display:flex;align-items:center;gap:1rem;">
+    <a href="{{ url_for('companies.index') }}" class="back-link">← Companies</a>
+    <h1 class="page-title" style="margin:0;">{{ company.name }}</h1>
+  </div>
+  <button class="btn btn-secondary" onclick="openModal('edit-company-modal')">Edit</button>
+</div>
+
+<div class="detail-layout">
+  <div class="detail-main">
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Company Information</h2></div>
+      <div class="info-grid">
+        <div class="info-item"><span class="info-label">Industry</span><span class="info-value">{{ company.industry or '—' }}</span></div>
+        <div class="info-item"><span class="info-label">Country</span><span class="info-value">{{ company.country or '—' }}</span></div>
+        <div class="info-item"><span class="info-label">Website</span><span class="info-value">{% if company.website %}<a href="{{ company.website }}" target="_blank">{{ company.website }}</a>{% else %}—{% endif %}</span></div>
+        <div class="info-item"><span class="info-label">Phone</span><span class="info-value">{{ company.phone or '—' }}</span></div>
+        {% if company.address %}
+        <div class="info-item info-item-full"><span class="info-label">Address</span><span class="info-value">{{ company.address }}</span></div>
+        {% endif %}
+        {% if company.notes %}
+        <div class="info-item info-item-full"><span class="info-label">Notes</span><span class="info-value">{{ company.notes }}</span></div>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Contacts -->
+    <div class="card" style="margin-top:1.5rem;">
+      <div class="card-header"><h2 class="card-title">Contacts ({{ company_contacts|length }})</h2></div>
+      {% if company_contacts %}
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Job Title</th></tr></thead>
+          <tbody>
+            {% for c in company_contacts %}
+            <tr>
+              <td><a href="{{ url_for('contacts.detail', contact_id=c.id) }}" class="table-link">{{ c.full_name }}</a></td>
+              <td>{{ c.email or '—' }}</td>
+              <td>{{ c.phone or '—' }}</td>
+              <td>{{ c.job_title or '—' }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <p class="text-muted text-sm" style="padding:1rem;">No contacts linked.</p>
+      {% endif %}
+    </div>
+
+    <!-- Leads -->
+    <div class="card" style="margin-top:1.5rem;">
+      <div class="card-header"><h2 class="card-title">Leads ({{ company_leads|length }})</h2></div>
+      {% if company_leads %}
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead><tr><th>Name</th><th>Country</th><th>Assigned To</th><th>Status</th><th>Created</th></tr></thead>
+          <tbody>
+            {% for l in company_leads %}
+            <tr>
+              <td><a href="{{ url_for('leads.detail', lead_id=l.id) }}" class="table-link">{{ l.name }}</a></td>
+              <td>{{ l.country or '—' }}</td>
+              <td>{{ l.assigned_to }}</td>
+              <td><span class="status-pill status-{{ l.status|replace(' ','-')|lower }}" style="font-size:0.75rem;">{{ l.status }}</span></td>
+              <td class="text-sm text-muted">{{ l.created_at.strftime('%d %b %Y') if l.created_at }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <p class="text-muted text-sm" style="padding:1rem;">No leads linked.</p>
+      {% endif %}
+    </div>
+
+    <!-- Notes -->
+    <div class="card" style="margin-top:1.5rem;">
+      <div class="card-header"><h2 class="card-title">Notes</h2></div>
+      <div class="notes-list">
+        {% for note in notes %}
+        <div class="note-item">
+          <p class="note-text">{{ note.note_text }}</p>
+          <div class="note-meta">{{ note.created_by }} · {{ note.created_at.strftime('%d %b %Y, %H:%M') }}</div>
+        </div>
+        {% else %}
+        <p class="text-muted text-sm" style="padding:0 1.5rem 1rem;">No notes yet.</p>
+        {% endfor %}
+      </div>
+      <div style="padding:1rem 1.5rem 1.5rem;border-top:1px solid var(--border);">
+        <form action="{{ url_for('companies.add_note', company_id=company.id) }}" method="POST">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+          <textarea name="note_text" class="form-textarea" rows="3" placeholder="Add a note…"></textarea>
+          <button type="submit" class="btn btn-secondary" style="margin-top:0.5rem;">Add Note</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div class="detail-sidebar">
+    <div class="card">
+      <div class="card-header"><h3 class="card-title">Tasks</h3></div>
+      {% for task in tasks %}
+      <div class="sidebar-list-item">
+        <div class="sidebar-item-title">{{ task.title }}</div>
+        <div class="sidebar-item-meta"><span class="badge priority-{{ task.priority|lower }}">{{ task.priority }}</span></div>
+      </div>
+      {% else %}
+      <p class="text-muted text-sm" style="padding:1rem;">No tasks.</p>
+      {% endfor %}
+    </div>
+
+    <div class="card" style="margin-top:1rem;">
+      <div class="card-header"><h3 class="card-title">Activity Log</h3></div>
+      <div class="activity-log">
+        {% for log in activity %}
+        <div class="activity-item">
+          <div class="activity-action">{{ log.action }}</div>
+          <div class="activity-meta">{{ log.user }} · {{ log.created_at.strftime('%d %b %Y') }}</div>
+        </div>
+        {% else %}
+        <p class="text-muted text-sm" style="padding:1rem;">No activity.</p>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Edit Company Modal -->
+<div id="edit-company-modal" class="modal hidden">
+  <div class="modal-backdrop" onclick="closeModal('edit-company-modal')"></div>
+  <div class="modal-dialog">
+    <div class="modal-header">
+      <h3>Edit Company</h3>
+      <button class="modal-close" onclick="closeModal('edit-company-modal')">&times;</button>
+    </div>
+    <form method="POST" action="{{ url_for('companies.edit', company_id=company.id) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+      <div class="modal-body">
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Name</label>
+            <input type="text" name="name" class="form-input" value="{{ company.name }}"/>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Industry</label>
+            <select name="industry" class="form-select">
+              <option value="">Select…</option>
+              {% for i in industries %}<option value="{{ i }}" {% if company.industry==i %}selected{% endif %}>{{ i }}</option>{% endfor %}
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Country</label>
+            <select name="country" class="form-select">
+              <option value="">Select…</option>
+              {% for c in countries %}<option value="{{ c }}" {% if company.country==c %}selected{% endif %}>{{ c }}</option>{% endfor %}
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Phone</label>
+            <input type="text" name="phone" class="form-input" value="{{ company.phone or '' }}"/>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Website</label>
+          <input type="text" name="website" class="form-input" value="{{ company.website or '' }}"/>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Address</label>
+          <textarea name="address" class="form-textarea" rows="2">{{ company.address or '' }}</textarea>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Notes</label>
+          <textarea name="notes" class="form-textarea" rows="2">{{ company.notes or '' }}</textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-ghost" onclick="closeModal('edit-company-modal')">Cancel</button>
+        <button type="submit" class="btn btn-primary">Save</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

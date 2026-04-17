@@ -1,0 +1,251 @@
+{% extends "base.html" %}
+{% block title %}Calendar — AgriChain CRM{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1 class="page-title">Calendar</h1>
+  <button class="btn btn-primary" onclick="openModal('add-event-modal')">+ Add Event</button>
+</div>
+
+<div class="calendar-layout">
+  <div class="calendar-main">
+    <div class="card">
+      <!-- Calendar Nav -->
+      <div class="cal-nav">
+        <button class="btn btn-ghost btn-sm" onclick="changeMonth(-1)">&#8249;</button>
+        <h2 id="cal-title" class="cal-title"></h2>
+        <button class="btn btn-ghost btn-sm" onclick="changeMonth(1)">&#8250;</button>
+      </div>
+      <!-- Day headers -->
+      <div class="cal-grid">
+        {% for day in ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'] %}
+        <div class="cal-day-header">{{ day }}</div>
+        {% endfor %}
+        <!-- Days rendered by JS -->
+        <div id="cal-days" style="display:contents;"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Day detail panel -->
+  <div class="calendar-sidebar">
+    <div class="card" id="day-detail-panel">
+      <div class="card-header">
+        <h3 class="card-title" id="day-detail-title">Select a day</h3>
+      </div>
+      <div id="day-detail-content" class="day-events-list">
+        <p class="text-muted text-sm" style="padding:1rem;">Click a day to see events.</p>
+      </div>
+    </div>
+
+    <!-- Event type legend -->
+    <div class="card" style="margin-top:1rem;">
+      <div class="card-header"><h3 class="card-title">Event Types</h3></div>
+      <div style="padding:1rem;">
+        {% for type, color in [('Call','#025D9D'),('Meeting','#6AAE20'),('Demo','#173347'),('Follow-up','#F9A825'),('Other','#9CA3AF')] %}
+        <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.4rem;">
+          <span style="width:12px;height:12px;border-radius:3px;background:{{color}};display:inline-block;flex-shrink:0;"></span>
+          <span class="text-sm">{{ type }}</span>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Add Event Modal -->
+<div id="add-event-modal" class="modal hidden">
+  <div class="modal-backdrop" onclick="closeModal('add-event-modal')"></div>
+  <div class="modal-dialog">
+    <div class="modal-header">
+      <h3>Add Event</h3>
+      <button class="modal-close" onclick="closeModal('add-event-modal')">&times;</button>
+    </div>
+    <form method="POST" action="{{ url_for('calendar.add') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+      <div class="modal-body">
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Title <span class="required">*</span></label>
+            <input type="text" name="title" class="form-input" required/>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Event Type</label>
+            <select name="event_type" class="form-select">
+              {% for t in event_types %}<option value="{{ t }}">{{ t }}</option>{% endfor %}
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Start</label>
+            <input type="datetime-local" name="start_datetime" class="form-input" id="new-event-start" required/>
+          </div>
+          <div class="form-group">
+            <label class="form-label">End</label>
+            <input type="datetime-local" name="end_datetime" class="form-input"/>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Description</label>
+          <textarea name="description" class="form-textarea" rows="2"></textarea>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Related Lead</label>
+            <select name="related_lead_id" class="form-select">
+              <option value="">None</option>
+              {% for l in leads %}<option value="{{ l.id }}">{{ l.name }}</option>{% endfor %}
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Related Contact</label>
+            <select name="related_contact_id" class="form-select">
+              <option value="">None</option>
+              {% for c in contacts %}<option value="{{ c.id }}">{{ c.full_name }}</option>{% endfor %}
+            </select>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-ghost" onclick="closeModal('add-event-modal')">Cancel</button>
+        <button type="submit" class="btn btn-primary">Create Event</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+const EVENT_COLORS = {
+  'Call': '#025D9D', 'Meeting': '#6AAE20', 'Demo': '#173347',
+  'Follow-up': '#F9A825', 'Other': '#9CA3AF'
+};
+
+let currentYear = new Date().getFullYear();
+let currentMonth = new Date().getMonth(); // 0-indexed
+let eventsCache = {};
+
+function changeMonth(delta) {
+  currentMonth += delta;
+  if (currentMonth > 11) { currentMonth = 0; currentYear++; }
+  if (currentMonth < 0) { currentMonth = 11; currentYear--; }
+  renderCalendar();
+}
+
+async function fetchEvents(year, month) {
+  const key = `${year}-${month}`;
+  if (eventsCache[key]) return eventsCache[key];
+  const res = await fetch(`/calendar/events?year=${year}&month=${month + 1}`);
+  const data = await res.json();
+  eventsCache[key] = data;
+  return data;
+}
+
+async function renderCalendar() {
+  const year = currentYear;
+  const month = currentMonth;
+  const monthNames = ['January','February','March','April','May','June',
+                      'July','August','September','October','November','December'];
+  document.getElementById('cal-title').textContent = `${monthNames[month]} ${year}`;
+
+  const events = await fetchEvents(year, month);
+
+  // Group events by day
+  const byDay = {};
+  events.forEach(e => {
+    const d = new Date(e.start);
+    const key = d.getDate();
+    if (!byDay[key]) byDay[key] = [];
+    byDay[key].push(e);
+  });
+
+  const firstDay = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const today = new Date();
+  const isThisMonth = today.getFullYear() === year && today.getMonth() === month;
+
+  const container = document.getElementById('cal-days');
+  container.innerHTML = '';
+
+  // Blank cells before first day
+  for (let i = 0; i < firstDay; i++) {
+    const blank = document.createElement('div');
+    blank.className = 'cal-cell cal-cell-blank';
+    container.appendChild(blank);
+  }
+
+  for (let d = 1; d <= daysInMonth; d++) {
+    const cell = document.createElement('div');
+    cell.className = 'cal-cell';
+    if (isThisMonth && d === today.getDate()) cell.classList.add('cal-today');
+
+    const dayNum = document.createElement('span');
+    dayNum.className = 'cal-day-num';
+    dayNum.textContent = d;
+    cell.appendChild(dayNum);
+
+    if (byDay[d]) {
+      byDay[d].slice(0, 3).forEach(ev => {
+        const chip = document.createElement('div');
+        chip.className = 'cal-event-chip';
+        chip.style.background = EVENT_COLORS[ev.event_type] || '#9CA3AF';
+        chip.textContent = ev.title.length > 14 ? ev.title.slice(0, 14) + '…' : ev.title;
+        cell.appendChild(chip);
+      });
+      if (byDay[d].length > 3) {
+        const more = document.createElement('div');
+        more.className = 'cal-more';
+        more.textContent = `+${byDay[d].length - 3} more`;
+        cell.appendChild(more);
+      }
+    }
+
+    const dateStr = `${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    cell.onclick = () => showDayDetail(dateStr, d, month, year);
+    container.appendChild(cell);
+  }
+}
+
+async function showDayDetail(dateStr, d, month, year) {
+  const monthNames = ['January','February','March','April','May','June',
+                      'July','August','September','October','November','December'];
+  document.getElementById('day-detail-title').textContent =
+    `${d} ${monthNames[month]} ${year}`;
+
+  document.getElementById('day-detail-content').innerHTML =
+    '<p class="text-muted text-sm" style="padding:1rem;">Loading…</p>';
+
+  // Set default start for new event
+  const startInput = document.getElementById('new-event-start');
+  if (startInput) startInput.value = `${dateStr}T09:00`;
+
+  const res = await fetch(`/calendar/day?date=${dateStr}`);
+  const events = await res.json();
+  const container = document.getElementById('day-detail-content');
+
+  if (events.length === 0) {
+    container.innerHTML = '<p class="text-muted text-sm" style="padding:1rem;">No events this day.</p>';
+    return;
+  }
+
+  container.innerHTML = '';
+  events.forEach(ev => {
+    const item = document.createElement('div');
+    item.className = 'day-event-item';
+    item.innerHTML = `
+      <div class="day-event-header">
+        <span class="event-dot" style="background:${EVENT_COLORS[ev.event_type] || '#9CA3AF'}"></span>
+        <strong>${ev.title}</strong>
+        <span class="text-sm text-muted">${ev.start}${ev.end ? ' – ' + ev.end : ''}</span>
+      </div>
+      ${ev.event_type ? `<div class="text-sm text-muted">${ev.event_type}</div>` : ''}
+      ${ev.description ? `<div class="text-sm" style="margin-top:4px;">${ev.description}</div>` : ''}
+      ${ev.related_lead ? `<div class="text-sm text-muted">Lead: ${ev.related_lead}</div>` : ''}
+      ${ev.related_contact ? `<div class="text-sm text-muted">Contact: ${ev.related_contact}</div>` : ''}
+    `;
+    container.appendChild(item);
+  });
+}
+
+renderCalendar();
+</script>
+{% endblock %}

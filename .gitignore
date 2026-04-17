@@ -1,0 +1,18 @@
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Environment / secrets
+.env
+
+# Database
+instance/
+
+# Logs
+app.log
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db

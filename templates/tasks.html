@@ -1,0 +1,229 @@
+{% extends "base.html" %}
+{% block title %}Tasks — AgriChain CRM{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1 class="page-title">Tasks</h1>
+  <button class="btn btn-primary" onclick="openModal('add-task-modal')">+ Add Task</button>
+</div>
+
+<!-- Tabs -->
+<div class="tab-bar">
+  {% for t, label in [('all','All'),('mine','My Tasks'),('overdue','Overdue'),('today','Due Today'),('completed','Completed')] %}
+  <a href="{{ url_for('tasks.index', tab=t) }}" class="tab {% if tab==t %}tab-active{% endif %}">{{ label }}</a>
+  {% endfor %}
+</div>
+
+<!-- Filters -->
+<div class="card filter-bar">
+  <form method="GET" class="filter-form">
+    <input type="hidden" name="tab" value="{{ tab }}"/>
+    <select name="status" class="form-select filter-select">
+      <option value="">All Statuses</option>
+      {% for s in ['Open','In Progress','Completed','Cancelled'] %}<option value="{{ s }}" {% if status_filter==s %}selected{% endif %}>{{ s }}</option>{% endfor %}
+    </select>
+    <select name="priority" class="form-select filter-select">
+      <option value="">All Priorities</option>
+      {% for p in ['Low','Medium','High'] %}<option value="{{ p }}" {% if priority_filter==p %}selected{% endif %}>{{ p }}</option>{% endfor %}
+    </select>
+    <select name="assigned_to" class="form-select filter-select">
+      <option value="">All Assignees</option>
+      {% for u in users %}<option value="{{ u.username }}" {% if assigned_filter==u.username %}selected{% endif %}>{{ u.username }}</option>{% endfor %}
+    </select>
+    <button type="submit" class="btn btn-secondary">Filter</button>
+  </form>
+</div>
+
+<div class="card">
+  <div class="table-wrap">
+    <table class="data-table">
+      <thead>
+        <tr><th>Title</th><th>Priority</th><th>Due Date</th><th>Assigned To</th><th>Related To</th><th>Status</th><th>Actions</th></tr>
+      </thead>
+      <tbody>
+        {% for task in tasks %}
+        <tr class="{% if task.due_date and task.due_date < now and task.status in ['Open','In Progress'] %}row-overdue{% endif %}">
+          <td class="fw-500">{{ task.title }}</td>
+          <td><span class="badge priority-{{ task.priority | lower }}">{{ task.priority }}</span></td>
+          <td class="text-sm {% if task.due_date and task.due_date < now and task.status in ['Open','In Progress'] %}text-red{% endif %}">
+            {{ task.due_date.strftime('%d %b %Y, %H:%M') if task.due_date else '—' }}
+          </td>
+          <td>{{ task.assigned_to or '—' }}</td>
+          <td>
+            {% if task.related_lead %}<a href="{{ url_for('leads.detail', lead_id=task.related_lead_id) }}" class="table-link">Lead: {{ task.related_lead.name }}</a>
+            {% elif task.related_contact %}<a href="{{ url_for('contacts.detail', contact_id=task.related_contact_id) }}" class="table-link">Contact: {{ task.related_contact.full_name }}</a>
+            {% elif task.related_company %}<a href="{{ url_for('companies.detail', company_id=task.related_company_id) }}" class="table-link">Company: {{ task.related_company.name }}</a>
+            {% else %}—{% endif %}
+          </td>
+          <td><span class="badge task-status-{{ task.status | replace(' ','-') | lower }}">{{ task.status }}</span></td>
+          <td>
+            <div class="action-btns">
+              {% if task.status not in ['Completed','Cancelled'] %}
+              <form action="{{ url_for('tasks.complete', task_id=task.id) }}" method="POST" style="display:inline;">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                <button type="submit" class="action-btn action-btn-green" title="Complete">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                </button>
+              </form>
+              {% endif %}
+              <button class="action-btn" title="Edit" onclick="openEditTaskModal({{ task.id }}, '{{ task.title|replace("'","\\'") }}', '{{ task.priority }}', '{{ task.status }}', '{{ task.assigned_to or "" }}', '{{ task.due_date.strftime("%Y-%m-%dT%H:%M") if task.due_date else "" }}')">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+              </button>
+              <form action="{{ url_for('tasks.delete', task_id=task.id) }}" method="POST" onsubmit="return confirm('Delete task?')" style="display:inline;">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                <button type="submit" class="action-btn action-btn-red" title="Delete">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+                </button>
+              </form>
+            </div>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="7" class="text-center text-muted py-4">No tasks found.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Add Task Modal -->
+<div id="add-task-modal" class="modal hidden">
+  <div class="modal-backdrop" onclick="closeModal('add-task-modal')"></div>
+  <div class="modal-dialog">
+    <div class="modal-header">
+      <h3>Add New Task</h3>
+      <button class="modal-close" onclick="closeModal('add-task-modal')">&times;</button>
+    </div>
+    <form method="POST" action="{{ url_for('tasks.add') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label">Title <span class="required">*</span></label>
+          <input type="text" name="title" class="form-input" required/>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Description</label>
+          <textarea name="description" class="form-textarea" rows="2"></textarea>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Due Date</label>
+            <input type="datetime-local" name="due_date" class="form-input"/>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Priority</label>
+            <select name="priority" class="form-select">
+              <option>Low</option><option selected>Medium</option><option>High</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Assigned To</label>
+          <select name="assigned_to" class="form-select">
+            {% for u in users %}<option value="{{ u.username }}" {% if u.username==current_user.username %}selected{% endif %}>{{ u.username }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Related To (Type)</label>
+            <select name="related_type" class="form-select" id="related-type-select" onchange="updateRelatedOptions()">
+              <option value="">None</option>
+              <option value="lead">Lead</option>
+              <option value="contact">Contact</option>
+              <option value="company">Company</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Related Record</label>
+            <select name="related_id" class="form-select" id="related-id-select">
+              <option value="">Select type first…</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-ghost" onclick="closeModal('add-task-modal')">Cancel</button>
+        <button type="submit" class="btn btn-primary">Create Task</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Edit Task Modal -->
+<div id="edit-task-modal" class="modal hidden">
+  <div class="modal-backdrop" onclick="closeModal('edit-task-modal')"></div>
+  <div class="modal-dialog">
+    <div class="modal-header">
+      <h3>Edit Task</h3>
+      <button class="modal-close" onclick="closeModal('edit-task-modal')">&times;</button>
+    </div>
+    <form id="edit-task-form" method="POST" action="">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label">Title</label>
+          <input type="text" name="title" id="edit-task-title" class="form-input"/>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Priority</label>
+            <select name="priority" id="edit-task-priority" class="form-select">
+              <option>Low</option><option>Medium</option><option>High</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Status</label>
+            <select name="status" id="edit-task-status" class="form-select">
+              <option>Open</option><option>In Progress</option><option>Completed</option><option>Cancelled</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Assigned To</label>
+            <select name="assigned_to" id="edit-task-assigned" class="form-select">
+              {% for u in users %}<option value="{{ u.username }}">{{ u.username }}</option>{% endfor %}
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Due Date</label>
+            <input type="datetime-local" name="due_date" id="edit-task-due" class="form-input"/>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-ghost" onclick="closeModal('edit-task-modal')">Cancel</button>
+        <button type="submit" class="btn btn-primary">Save</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+const leadsData = [{% for l in leads %}{"id":{{l.id}},"name":"{{l.name|replace('"','&quot;')}}"}{% if not loop.last %},{% endif %}{% endfor %}];
+const contactsData = [{% for c in contacts %}{"id":{{c.id}},"name":"{{c.full_name|replace('"','&quot;')}}"}{% if not loop.last %},{% endif %}{% endfor %}];
+const companiesData = [{% for co in companies %}{"id":{{co.id}},"name":"{{co.name|replace('"','&quot;')}}"}{% if not loop.last %},{% endif %}{% endfor %}];
+
+function updateRelatedOptions() {
+  const type = document.getElementById('related-type-select').value;
+  const sel = document.getElementById('related-id-select');
+  sel.innerHTML = '<option value="">Select…</option>';
+  let data = type === 'lead' ? leadsData : type === 'contact' ? contactsData : type === 'company' ? companiesData : [];
+  data.forEach(item => {
+    const opt = document.createElement('option');
+    opt.value = item.id;
+    opt.textContent = item.name;
+    sel.appendChild(opt);
+  });
+}
+
+function openEditTaskModal(id, title, priority, status, assigned, due) {
+  document.getElementById('edit-task-form').action = '/tasks/' + id + '/edit';
+  document.getElementById('edit-task-title').value = title;
+  document.getElementById('edit-task-priority').value = priority;
+  document.getElementById('edit-task-status').value = status;
+  document.getElementById('edit-task-assigned').value = assigned;
+  document.getElementById('edit-task-due').value = due;
+  openModal('edit-task-modal');
+}
+</script>
+{% endblock %}

@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% block title %}Pipelines — AgriChain CRM{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1 class="page-title">Pipelines</h1>
+  <button class="btn btn-primary" onclick="openModal('add-pipeline-modal')">+ New Pipeline</button>
+</div>
+
+{% if pipelines %}
+<div class="pipeline-grid">
+  {% for p in pipelines %}
+  <a href="{{ url_for('pipelines.detail', pipeline_id=p.id) }}" class="pipeline-card">
+    <div class="pipeline-card-title">{{ p.name }}</div>
+    {% if p.description %}
+    <div class="pipeline-card-desc">{{ p.description }}</div>
+    {% endif %}
+
+    {% set bars = pipeline_bar_data.get(p.id, []) %}
+    {% if bars %}
+    <div class="pipeline-stage-bars" style="margin:0.6rem 0 0.2rem;">
+      {% for bar in bars %}
+      <div class="pipeline-stage-bar" style="width:{{ bar.pct }}%;background:{{ bar.color }};" title="{{ bar.stage }}: {{ bar.count }}"></div>
+      {% endfor %}
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:0.4rem 0.75rem;margin-bottom:0.4rem;">
+      {% for bar in bars %}
+      <span style="font-size:0.68rem;color:var(--text-muted);display:flex;align-items:center;gap:3px;">
+        <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:{{ bar.color }};flex-shrink:0;"></span>{{ bar.stage }}&nbsp;<strong>{{ bar.count }}</strong>
+      </span>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    <div class="pipeline-card-meta">
+      <span class="pipeline-card-stat">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px;"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+        <strong>{{ p.contacts.count() }}</strong> contacts
+      </span>
+      <span class="pipeline-card-stat">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px;"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+        <strong>{{ p.companies.count() }}</strong> companies
+      </span>
+      <span class="pipeline-card-stat">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px;"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+        <strong>{{ p.leads.count() }}</strong> leads
+      </span>
+    </div>
+    <div class="pipeline-card-footer">
+      <span>Owner: {{ p.owner }}</span>
+      <span>{{ p.created_at.strftime('%d %b %Y') if p.created_at }}</span>
+    </div>
+  </a>
+  {% endfor %}
+</div>
+{% else %}
+<div class="card" style="padding:3rem;text-align:center;">
+  <svg viewBox="0 0 24 24" fill="none" stroke="var(--border)" stroke-width="1.5" style="width:48px;height:48px;margin:0 auto 1rem;display:block;">
+    <circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/>
+    <path d="M13 6h3a2 2 0 0 1 2 2v7"/><line x1="6" y1="9" x2="6" y2="21"/>
+  </svg>
+  <p class="text-muted" style="margin-bottom:1rem;">No pipelines yet. Create one to group contacts, companies, and leads.</p>
+  <button class="btn btn-primary" onclick="openModal('add-pipeline-modal')">Create your first pipeline</button>
+</div>
+{% endif %}
+
+<!-- Add Pipeline Modal -->
+<div id="add-pipeline-modal" class="modal hidden">
+  <div class="modal-backdrop" onclick="closeModal('add-pipeline-modal')"></div>
+  <div class="modal-dialog">
+    <div class="modal-header">
+      <h3>New Pipeline</h3>
+      <button class="modal-close" onclick="closeModal('add-pipeline-modal')">&times;</button>
+    </div>
+    <form method="POST" action="{{ url_for('pipelines.add') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label">Pipeline Name <span class="required">*</span></label>
+          <input type="text" name="name" class="form-input" required placeholder="e.g. Q2 Australia Prospects"/>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Description</label>
+          <textarea name="description" class="form-textarea" rows="2" placeholder="Optional description…"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-ghost" onclick="closeModal('add-pipeline-modal')">Cancel</button>
+        <button type="submit" class="btn btn-primary">Create Pipeline</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

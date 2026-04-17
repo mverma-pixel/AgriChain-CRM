@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}{{ board_title }} — Board — AgriChain CRM{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div style="display:flex;flex-direction:column;gap:0.25rem;">
+    <a href="{{ url_for('reports.index') }}" class="back-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><polyline points="15 18 9 12 15 6"/></svg>
+      Reports
+    </a>
+    <h1 class="page-title">{{ board_title }}</h1>
+  </div>
+  <div style="display:flex;align-items:center;gap:0.75rem;">
+    <span class="text-muted text-sm">{{ total }} lead{{ 's' if total != 1 }}</span>
+    <form method="GET" style="display:flex;gap:0.5rem;">
+      <input type="hidden" name="view" value="{{ view }}"/>
+      <input type="hidden" name="filter" value="{{ filter_val }}"/>
+      <input type="text" name="search" value="{{ search }}" placeholder="Search leads…" class="form-input" style="width:200px;"/>
+      <button type="submit" class="btn btn-secondary btn-sm">Search</button>
+    </form>
+  </div>
+</div>
+
+<div class="kanban-board">
+  {% for col in columns %}
+  <div class="kanban-col">
+    <div class="kanban-col-header" style="border-top:3px solid {{ col.color }};">
+      <span class="kanban-col-title">{{ col.stage }}</span>
+      <span class="kanban-col-count">{{ col.count }}</span>
+    </div>
+    {% for lead in col.leads %}
+    <a href="{{ url_for('leads.detail', lead_id=lead.id) }}" class="kanban-card">
+      <div class="kanban-card-name">{{ lead.name }}</div>
+      {% if lead.company %}<div class="kanban-card-sub">{{ lead.company }}</div>{% endif %}
+      <div class="kanban-card-meta">
+        {% if lead.country %}<span>{{ lead.country }}</span>{% endif %}
+        {% if lead.assigned_to and lead.assigned_to != 'Unassigned' %}<span>{{ lead.assigned_to }}</span>{% endif %}
+      </div>
+    </a>
+    {% else %}
+    <div class="kanban-empty">No leads</div>
+    {% endfor %}
+  </div>
+  {% endfor %}
+</div>
+{% endblock %}

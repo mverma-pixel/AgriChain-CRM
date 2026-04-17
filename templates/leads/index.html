@@ -1,0 +1,540 @@
+{% extends "base.html" %}
+{% block title %}Leads — AgriChain CRM{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1 class="page-title">Leads</h1>
+  <div style="display:flex;gap:0.5rem;">
+    <button class="btn btn-secondary" onclick="openModal('import-leads-modal')">Import CSV</button>
+    <button class="btn btn-primary" onclick="openModal('add-lead-modal')">+ Add Lead</button>
+  </div>
+</div>
+
+<!-- Filters -->
+<div class="card filter-bar">
+  <form method="GET" action="{{ url_for('leads.index') }}" class="filter-form">
+    <input type="text" name="search" value="{{ search }}" placeholder="Search name, company, email…" class="form-input filter-input"/>
+    <select name="status" class="form-select filter-select">
+      <option value="">All Statuses</option>
+      {% for s in statuses %}<option value="{{ s }}" {% if status_filter == s %}selected{% endif %}>{{ s }}</option>{% endfor %}
+    </select>
+    <select name="assigned_to" class="form-select filter-select">
+      <option value="">All Assignees</option>
+      {% for a in assignees %}<option value="{{ a }}" {% if assigned_filter == a %}selected{% endif %}>{{ a }}</option>{% endfor %}
+    </select>
+    <select name="source" class="form-select filter-select">
+      <option value="">All Sources</option>
+      {% for c in channels %}<option value="{{ c }}" {% if source_filter == c %}selected{% endif %}>{{ c }}</option>{% endfor %}
+    </select>
+    <button type="submit" class="btn btn-secondary">Filter</button>
+    <a href="{{ url_for('leads.index') }}" class="btn btn-ghost">Clear</a>
+  </form>
+</div>
+
+<!-- Mini funnel -->
+<div class="card funnel-mini">
+  {% set stage_colors = {'New Lead':'#4A7FA5','Pending':'#F9A825','SAL':'#A8D86E','Out':'#E53935','Demo':'#173347','Close Won':'#6AAE20','Close Lost':'#c27a00'} %}
+  {% set max_count = funnel_data | map(attribute='count') | max %}
+  <div class="funnel-mini-bars">
+    {% for item in funnel_data %}
+    <a href="{{ url_for('leads.index') }}?status={{ item.stage | urlencode }}" class="funnel-mini-item">
+      <span class="funnel-mini-count">{{ item.count }}</span>
+      <div class="funnel-mini-bar" style="background:{{ stage_colors.get(item.stage, '#999') }};height:{{ [((item.count/(max_count or 1))*40)|round|int, 4]|max }}px"></div>
+      <span class="funnel-mini-label">{{ item.stage }}</span>
+    </a>
+    {% endfor %}
+  </div>
+</div>
+
+<!-- Bulk action bar -->
+<form id="bulk-form" method="POST" action="{{ url_for('leads.bulk_action') }}">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+  <input type="hidden" name="action" id="bulk-action-input" value=""/>
+
+<!-- Leads Table -->
+<div class="card">
+  <div id="bulk-bar" class="bulk-bar">
+    <span class="bulk-count"><span id="bulk-count-num">0</span> selected</span>
+    <div class="bulk-actions">
+      <button type="button" class="bulk-btn" onclick="submitBulkAction('export_csv')">Export CSV</button>
+      <button type="button" class="bulk-btn" style="background:var(--primary);border-color:var(--primary);" onclick="openModal('bulk-pipeline-modal')">+ Add to Pipeline</button>
+    </div>
+    <button type="button" class="bulk-cancel-btn" onclick="clearBulkSelection()">Clear</button>
+  </div>
+  <div class="table-wrap">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th style="width:32px;"><input type="checkbox" id="select-all" class="bulk-checkbox" onclick="toggleSelectAll(this)" title="Select all"/></th>
+          <th>#</th>
+          <th>Name</th>
+          <th>Company</th>
+          <th>Country</th>
+          <th>Source</th>
+          <th>Source URL</th>
+          <th>Assigned To</th>
+          <th>Status</th>
+          <th>Created</th>
+          <th>Days in Stage</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for lead in leads.items %}
+        <tr id="lead-row-{{ lead.id }}">
+          <td><input type="checkbox" name="lead_ids" value="{{ lead.id }}" class="bulk-checkbox row-checkbox" onchange="updateBulkBar()"/></td>
+          <td class="text-muted text-sm">{{ lead.id }}</td>
+          <td><a href="{{ url_for('leads.detail', lead_id=lead.id) }}" class="table-link fw-500">{{ lead.name }}</a></td>
+          <td>{{ lead.company or '—' }}</td>
+          <td>{{ lead.country or '—' }}</td>
+          <td>{% if lead.source_channel %}<span class="badge badge-source">{{ lead.source_channel }}</span>{% else %}—{% endif %}</td>
+          <td>
+            {% if lead.source_url %}
+            <a href="{{ lead.source_url }}" target="_blank" class="url-truncate" title="{{ lead.source_url }}">
+              {{ lead.source_url[:30] }}{% if lead.source_url|length > 30 %}…{% endif %}
+            </a>
+            {% else %}—{% endif %}
+          </td>
+          <td>
+            <form action="{{ url_for('leads.assign', lead_id=lead.id) }}" method="POST" class="inline-form">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+              <select name="assigned_to" class="inline-select" onchange="this.form.submit()">
+                {% for a in assignees %}
+                <option value="{{ a }}" {% if lead.assigned_to == a %}selected{% endif %}>{{ a }}</option>
+                {% endfor %}
+              </select>
+            </form>
+          </td>
+          <td>
+            <button class="status-pill status-{{ lead.status | replace(' ', '-') | lower }} status-btn"
+                    onclick="openStatusDropdown({{ lead.id }}, '{{ lead.status }}', this)">
+              {{ lead.status }}
+            </button>
+          </td>
+          <td class="text-muted text-sm">{{ lead.created_at.strftime('%d %b %Y') if lead.created_at }}</td>
+          <td class="text-center">
+            <span class="days-badge">{{ lead.get_days_in_current_stage() }}d</span>
+          </td>
+          <td>
+            <div class="action-btns">
+              <a href="{{ url_for('leads.detail', lead_id=lead.id) }}" class="action-btn" title="View">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+              </a>
+              <button class="action-btn" title="Edit" onclick="openEditLeadModal({{ lead.id }})">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+              </button>
+              {% if current_user.role == 'admin' %}
+              <form action="{{ url_for('leads.delete', lead_id=lead.id) }}" method="POST" onsubmit="return confirm('Delete this lead?')">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                <button type="submit" class="action-btn action-btn-red" title="Delete">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+                </button>
+              </form>
+              {% endif %}
+            </div>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="12" class="text-center text-muted py-4">No leads found. <button class="btn-link" onclick="openModal('add-lead-modal')">Add your first lead.</button></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Pagination -->
+  {% if leads.pages > 1 %}
+  <div class="pagination">
+    {% if leads.has_prev %}
+    <a href="{{ url_for('leads.index', page=leads.prev_num, search=search, status=status_filter, assigned_to=assigned_filter, source=source_filter) }}" class="page-btn">&lsaquo; Prev</a>
+    {% endif %}
+    <span class="page-info">Page {{ leads.page }} of {{ leads.pages }}</span>
+    {% if leads.has_next %}
+    <a href="{{ url_for('leads.index', page=leads.next_num, search=search, status=status_filter, assigned_to=assigned_filter, source=source_filter) }}" class="page-btn">Next &rsaquo;</a>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>
+</form>
+
+<!-- Add Lead Modal -->
+<div id="add-lead-modal" class="modal hidden">
+  <div class="modal-backdrop" onclick="closeModal('add-lead-modal')"></div>
+  <div class="modal-dialog">
+    <div class="modal-header">
+      <h3>Add New Lead</h3>
+      <button class="modal-close" onclick="closeModal('add-lead-modal')">&times;</button>
+    </div>
+    <form method="POST" action="{{ url_for('leads.add') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+      <div class="modal-body">
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Name <span class="required">*</span></label>
+            <input type="text" name="name" class="form-input" required/>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Company</label>
+            <input type="text" name="company" class="form-input"/>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Country</label>
+            <select name="country" class="form-select" onchange="autoAssign(this.value)">
+              <option value="">Select country…</option>
+              {% for c in countries %}<option value="{{ c }}">{{ c }}</option>{% endfor %}
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Assigned To</label>
+            <select name="assigned_to" id="add-assigned-to" class="form-select">
+              {% for a in assignees %}<option value="{{ a }}">{{ a }}</option>{% endfor %}
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Email</label>
+            <input type="email" name="email" class="form-input"/>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Phone</label>
+            <input type="text" name="phone" class="form-input"/>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Source Channel</label>
+            <select name="source_channel" class="form-select">
+              <option value="">Select…</option>
+              {% for c in channels %}<option value="{{ c }}">{{ c }}</option>{% endfor %}
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Source URL</label>
+            <input type="text" name="source_url" class="form-input" placeholder="https://…"/>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Message</label>
+          <textarea name="message" class="form-textarea" rows="3"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-ghost" onclick="closeModal('add-lead-modal')">Cancel</button>
+        <button type="submit" class="btn btn-primary">Create Lead</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Status Dropdown (floating) -->
+<div id="status-dropdown" class="status-dropdown hidden">
+  {% set stage_colors = {'New Lead':'#4A7FA5','SAL':'#A8D86E','Out':'#E53935','Demo':'#173347','Close Won':'#6AAE20','Close Lost':'#F9A825'} %}
+  {% for s in statuses %}
+  <button class="status-pill status-{{ s | replace(' ', '-') | lower }} status-option"
+          onclick="selectStatus('{{ s }}')" data-status="{{ s }}">{{ s }}</button>
+  {% endfor %}
+</div>
+
+<!-- Feedback Modal -->
+<div id="feedback-modal" class="modal hidden">
+  <div class="modal-backdrop" onclick="cancelStatusChange()"></div>
+  <div class="modal-dialog modal-sm">
+    <div class="modal-header">
+      <h3>Reason Required</h3>
+      <button class="modal-close" onclick="cancelStatusChange()">&times;</button>
+    </div>
+    <div class="modal-body">
+      <p id="feedback-prompt" class="text-muted" style="margin-bottom:1rem;"></p>
+      <div class="form-group">
+        <label class="form-label">Reason <span class="required">*</span></label>
+        <textarea id="feedback-text" class="form-textarea" rows="4" placeholder="Please explain (min 10 characters)…"></textarea>
+        <span id="feedback-error" class="form-error hidden">Please provide a reason (min 10 characters).</span>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-ghost" onclick="cancelStatusChange()">Cancel</button>
+      <button type="button" class="btn btn-primary" onclick="confirmStatusChange()">Confirm Status Change</button>
+    </div>
+  </div>
+</div>
+
+<!-- Edit Lead Modal (populated via JS) -->
+<div id="edit-lead-modal" class="modal hidden">
+  <div class="modal-backdrop" onclick="closeModal('edit-lead-modal')"></div>
+  <div class="modal-dialog">
+    <div class="modal-header">
+      <h3>Edit Lead</h3>
+      <button class="modal-close" onclick="closeModal('edit-lead-modal')">&times;</button>
+    </div>
+    <div id="edit-lead-body" class="modal-body">
+      <p class="text-muted">Loading…</p>
+    </div>
+  </div>
+</div>
+
+<script>
+// Auto-assign on country select
+function autoAssign(country) {
+  const anz = ['Australia', 'New Zealand'];
+  const na = ['United States', 'Canada'];
+  const select = document.getElementById('add-assigned-to');
+  if (anz.includes(country)) select.value = 'Skye';
+  else if (na.includes(country)) select.value = 'Tony';
+  else select.value = 'Unassigned';
+}
+
+// Status dropdown management
+let currentLeadId = null;
+let currentStatus = null;
+let pendingStatus = null;
+let triggerBtn = null;
+
+function openStatusDropdown(leadId, currentSt, btn) {
+  currentLeadId = leadId;
+  currentStatus = currentSt;
+  triggerBtn = btn;
+  const dd = document.getElementById('status-dropdown');
+  const rect = btn.getBoundingClientRect();
+  dd.style.top = (rect.bottom + window.scrollY + 4) + 'px';
+  dd.style.left = rect.left + 'px';
+  dd.classList.remove('hidden');
+  setTimeout(() => document.addEventListener('click', closeStatusDropdown), 10);
+}
+
+function closeStatusDropdown(e) {
+  const dd = document.getElementById('status-dropdown');
+  if (!dd.contains(e.target)) {
+    dd.classList.add('hidden');
+    document.removeEventListener('click', closeStatusDropdown);
+  }
+}
+
+function selectStatus(newStatus) {
+  document.getElementById('status-dropdown').classList.add('hidden');
+  document.removeEventListener('click', closeStatusDropdown);
+  if (newStatus === currentStatus) return;
+
+  const feedbackStatuses = ['Out', 'Close Lost'];
+  const needsFeedback = feedbackStatuses.includes(newStatus) || feedbackStatuses.includes(currentStatus);
+
+  pendingStatus = newStatus;
+
+  if (needsFeedback) {
+    document.getElementById('feedback-prompt').textContent =
+      'Please explain why this lead is being moved to "' + newStatus + '"';
+    document.getElementById('feedback-text').value = '';
+    document.getElementById('feedback-error').classList.add('hidden');
+    openModal('feedback-modal');
+  } else {
+    submitStatusChange('');
+  }
+}
+
+function cancelStatusChange() {
+  closeModal('feedback-modal');
+  pendingStatus = null;
+}
+
+function confirmStatusChange() {
+  const text = document.getElementById('feedback-text').value.trim();
+  if (text.length < 10) {
+    document.getElementById('feedback-error').classList.remove('hidden');
+    return;
+  }
+  closeModal('feedback-modal');
+  submitStatusChange(text);
+}
+
+function submitStatusChange(feedbackText) {
+  const csrf = document.querySelector('meta[name="csrf-token"]').content;
+  const body = new FormData();
+  body.append('status', pendingStatus);
+  body.append('feedback_text', feedbackText);
+  body.append('csrf_token', csrf);
+
+  fetch('/leads/' + currentLeadId + '/status', { method: 'POST', body })
+    .then(r => r.json())
+    .then(data => {
+      if (data.status === 'ok') {
+        // Update button
+        if (triggerBtn) {
+          const cls = 'status-' + pendingStatus.toLowerCase().replace(/ /g, '-');
+          triggerBtn.className = 'status-pill ' + cls + ' status-btn';
+          triggerBtn.textContent = pendingStatus;
+          triggerBtn.onclick = () => openStatusDropdown(currentLeadId, pendingStatus, triggerBtn);
+        }
+        currentStatus = pendingStatus;
+      } else if (data.error) {
+        alert('Error: ' + data.message || data.error);
+      }
+    });
+}
+
+function openEditLeadModal(leadId) {
+  window.location.href = '/leads/' + leadId;
+}
+
+// Bulk selection
+function updateBulkBar() {
+  const checked = document.querySelectorAll('.row-checkbox:checked');
+  const bar = document.getElementById('bulk-bar');
+  document.getElementById('bulk-count-num').textContent = checked.length;
+  bar.classList.toggle('visible', checked.length > 0);
+  document.querySelectorAll('.row-checkbox').forEach(cb => {
+    const row = cb.closest('tr');
+    row.classList.toggle('row-selected', cb.checked);
+  });
+}
+
+function toggleSelectAll(master) {
+  document.querySelectorAll('.row-checkbox').forEach(cb => {
+    cb.checked = master.checked;
+  });
+  updateBulkBar();
+}
+
+function clearBulkSelection() {
+  document.querySelectorAll('.row-checkbox, #select-all').forEach(cb => cb.checked = false);
+  updateBulkBar();
+}
+
+function submitBulkAction(action) {
+  const checked = document.querySelectorAll('.row-checkbox:checked');
+  if (!checked.length) { alert('Select at least one lead.'); return; }
+  const form = document.getElementById('bulk-form');
+  // Remove any previously added dynamic inputs
+  form.querySelectorAll('.dynamic-bulk-input').forEach(el => el.remove());
+  if (action === 'add_to_pipeline') {
+    const pid = document.getElementById('bulk-pipeline-select').value;
+    if (!pid) { alert('Please select a pipeline.'); return; }
+    document.getElementById('bulk-action-input').value = 'add_to_pipeline';
+    const pidInput = document.createElement('input');
+    pidInput.type = 'hidden'; pidInput.name = 'pipeline_id'; pidInput.value = pid;
+    pidInput.className = 'dynamic-bulk-input';
+    form.appendChild(pidInput);
+  } else if (action === 'create_pipeline') {
+    const name = prompt('Enter a name for the new pipeline:');
+    if (!name || !name.trim()) return;
+    document.getElementById('bulk-action-input').value = 'create_pipeline';
+    const nameInput = document.createElement('input');
+    nameInput.type = 'hidden'; nameInput.name = 'new_pipeline_name'; nameInput.value = name.trim();
+    nameInput.className = 'dynamic-bulk-input';
+    form.appendChild(nameInput);
+  } else {
+    document.getElementById('bulk-action-input').value = action;
+  }
+  form.submit();
+}
+
+function submitPipelineModal() {
+  const mode = document.querySelector('input[name="pipeline_mode"]:checked').value;
+  if (mode === 'existing') {
+    const pid = document.getElementById('modal-pipeline-select').value;
+    if (!pid) { alert('Please select a pipeline.'); return; }
+    document.getElementById('bulk-action-input').value = 'add_to_pipeline';
+    const form = document.getElementById('bulk-form');
+    form.querySelectorAll('.dynamic-bulk-input').forEach(el => el.remove());
+    const pidInput = document.createElement('input');
+    pidInput.type = 'hidden'; pidInput.name = 'pipeline_id'; pidInput.value = pid;
+    pidInput.className = 'dynamic-bulk-input';
+    form.appendChild(pidInput);
+    closeModal('bulk-pipeline-modal');
+    form.submit();
+  } else {
+    const name = document.getElementById('new-pipeline-name').value.trim();
+    if (!name) { alert('Please enter a pipeline name.'); return; }
+    document.getElementById('bulk-action-input').value = 'create_pipeline';
+    const form = document.getElementById('bulk-form');
+    form.querySelectorAll('.dynamic-bulk-input').forEach(el => el.remove());
+    const nameInput = document.createElement('input');
+    nameInput.type = 'hidden'; nameInput.name = 'new_pipeline_name'; nameInput.value = name;
+    nameInput.className = 'dynamic-bulk-input';
+    form.appendChild(nameInput);
+    closeModal('bulk-pipeline-modal');
+    form.submit();
+  }
+}
+</script>
+
+<!-- Add to Pipeline Modal -->
+<div id="bulk-pipeline-modal" class="modal hidden">
+  <div class="modal-backdrop" onclick="closeModal('bulk-pipeline-modal')"></div>
+  <div class="modal-dialog modal-sm">
+    <div class="modal-header">
+      <h3>Add to Pipeline</h3>
+      <button class="modal-close" onclick="closeModal('bulk-pipeline-modal')">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div style="display:flex;flex-direction:column;gap:1rem;">
+        <label style="display:flex;align-items:flex-start;gap:0.75rem;cursor:pointer;padding:0.75rem;border:1px solid var(--border);border-radius:var(--radius);" id="mode-existing-label">
+          <input type="radio" name="pipeline_mode" value="existing" checked onchange="togglePipelineMode()" style="margin-top:2px;"/>
+          <div>
+            <div style="font-weight:500;font-size:0.875rem;">Existing Pipeline</div>
+            <div style="font-size:0.8rem;color:var(--text-muted);">Add to a pipeline you've already created</div>
+          </div>
+        </label>
+        <div id="existing-pipeline-select" style="padding:0 0.5rem;">
+          <select id="modal-pipeline-select" class="form-select">
+            <option value="">Select a pipeline…</option>
+            {% for p in pipelines %}<option value="{{ p.id }}">{{ p.name }}</option>{% endfor %}
+          </select>
+        </div>
+        <label style="display:flex;align-items:flex-start;gap:0.75rem;cursor:pointer;padding:0.75rem;border:1px solid var(--border);border-radius:var(--radius);" id="mode-new-label">
+          <input type="radio" name="pipeline_mode" value="new" onchange="togglePipelineMode()" style="margin-top:2px;"/>
+          <div>
+            <div style="font-weight:500;font-size:0.875rem;">Create New Pipeline</div>
+            <div style="font-size:0.8rem;color:var(--text-muted);">Start a new pipeline with the selected leads</div>
+          </div>
+        </label>
+        <div id="new-pipeline-input" style="padding:0 0.5rem;display:none;">
+          <input type="text" id="new-pipeline-name" class="form-input" placeholder="Pipeline name…"/>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-ghost" onclick="closeModal('bulk-pipeline-modal')">Cancel</button>
+      <button type="button" class="btn btn-primary" onclick="submitPipelineModal()">Confirm</button>
+    </div>
+  </div>
+</div>
+<script>
+function togglePipelineMode() {
+  const mode = document.querySelector('input[name="pipeline_mode"]:checked').value;
+  document.getElementById('existing-pipeline-select').style.display = mode === 'existing' ? 'block' : 'none';
+  document.getElementById('new-pipeline-input').style.display = mode === 'new' ? 'block' : 'none';
+}
+</script>
+
+<!-- Import Leads CSV Modal -->
+<div id="import-leads-modal" class="modal hidden">
+  <div class="modal-backdrop" onclick="closeModal('import-leads-modal')"></div>
+  <div class="modal-dialog modal-sm">
+    <div class="modal-header">
+      <h3>Import Leads</h3>
+      <button class="modal-close" onclick="closeModal('import-leads-modal')">&times;</button>
+    </div>
+    <form method="POST" action="{{ url_for('leads.import_csv') }}" enctype="multipart/form-data">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+      <div class="modal-body">
+        <p class="text-muted" style="font-size:0.83rem;margin-bottom:1rem;">
+          Upload a <code>.csv</code>, <code>.xlsx</code>, or <code>.xls</code> file. Column headers are matched automatically — use any sensible names. Known columns:
+        </p>
+        <div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:0.75rem;font-size:0.78rem;line-height:1.8;color:var(--text-muted);">
+          <strong style="color:var(--text);">Name</strong> (required) &nbsp;·&nbsp;
+          Company &nbsp;·&nbsp; Country &nbsp;·&nbsp; Email &nbsp;·&nbsp; Phone &nbsp;·&nbsp;
+          Source Channel &nbsp;·&nbsp; Message &nbsp;·&nbsp; Assigned To &nbsp;·&nbsp; Status
+        </div>
+        <div class="form-group" style="margin-top:1rem;">
+          <label class="form-label">CSV File</label>
+          <input type="file" name="csv_file" accept=".csv,.xlsx,.xls" class="form-input" required/>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-ghost" onclick="closeModal('import-leads-modal')">Cancel</button>
+        <button type="submit" class="btn btn-primary">Import</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

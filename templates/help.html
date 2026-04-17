@@ -1,0 +1,139 @@
+{% extends "base.html" %}
+{% block title %}Help — AgriChain CRM{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1 class="page-title">Help</h1>
+</div>
+
+<div class="help-layout">
+  <nav class="help-nav">
+    <a href="#getting-started" class="help-nav-link">Getting Started</a>
+    <a href="#leads" class="help-nav-link">Leads</a>
+    <a href="#contacts" class="help-nav-link">Contacts &amp; Companies</a>
+    <a href="#tasks" class="help-nav-link">Tasks &amp; Calendar</a>
+    <a href="#reports" class="help-nav-link">Reports</a>
+    <a href="#api" class="help-nav-link">API</a>
+    <a href="#slack" class="help-nav-link">Slack</a>
+  </nav>
+
+  <div class="help-content">
+
+    <div id="getting-started" class="card help-section">
+      <h2>Getting Started</h2>
+      <h3>Logging In</h3>
+      <p>Navigate to the CRM URL and log in with your username and password. Contact your admin if you don't have an account.</p>
+      <h3>Navigation</h3>
+      <p>Use the left sidebar to navigate between modules: Dashboard, Leads, Contacts, Companies, Calendar, Tasks, Reports, and Settings.</p>
+      <p>Click the search button in the sidebar to search across all leads, contacts, and companies.</p>
+    </div>
+
+    <div id="leads" class="card help-section">
+      <h2>Leads</h2>
+      <h3>What is a Lead?</h3>
+      <p>A lead is a potential customer who has shown interest in AgriChain. Leads move through a defined pipeline of stages.</p>
+      <h3>Lead Stages</h3>
+      <ul>
+        <li><strong>New Lead</strong> — Just entered the system, not yet qualified.</li>
+        <li><strong>SAL</strong> — Sales Accepted Lead: qualified and ready for outreach.</li>
+        <li><strong>Out</strong> — Lead is not progressing (requires reason).</li>
+        <li><strong>Demo</strong> — A product demo has been scheduled or completed.</li>
+        <li><strong>Close Won</strong> — Deal closed successfully.</li>
+        <li><strong>Close Lost</strong> — Deal lost (requires reason).</li>
+      </ul>
+      <h3>Why is a reason required for Out and Close Lost?</h3>
+      <p>To build a data-driven understanding of why leads don't convert, we require a written reason whenever a lead is marked as Out or Close Lost — or when moving away from those stages. This feedback feeds directly into the Reports section.</p>
+      <h3>Auto-Assignment</h3>
+      <p>Leads from Australia and New Zealand are automatically assigned to <strong>Skye</strong>. Leads from USA and Canada go to <strong>Tony</strong>. All others are Unassigned. You can always override assignment manually.</p>
+    </div>
+
+    <div id="contacts" class="card help-section">
+      <h2>Contacts &amp; Companies</h2>
+      <h3>Contacts</h3>
+      <p>Contacts represent real people you interact with. A contact can be created manually, converted from a lead, or created via the API.</p>
+      <h3>Converting a Lead to a Contact</h3>
+      <p>On any lead detail page, click "Convert to Contact". This creates a Contact record from the lead's data and links them together.</p>
+      <h3>Companies</h3>
+      <p>Companies represent organisations. Contacts and Leads can be linked to a company. Use the Companies module to track all your key accounts.</p>
+    </div>
+
+    <div id="tasks" class="card help-section">
+      <h2>Tasks &amp; Calendar</h2>
+      <h3>Tasks</h3>
+      <p>Tasks represent action items. Each task has a title, priority (Low/Medium/High), due date, assignee, and optional link to a lead, contact, or company.</p>
+      <p>Use the "My Tasks" tab to see only your own tasks. The "Overdue" tab shows tasks that have passed their due date.</p>
+      <h3>Calendar</h3>
+      <p>The Calendar shows all scheduled events by month. Click any day to see the events for that day in the right panel. Add events using the "+ Add Event" button.</p>
+      <p>Event types: Call, Meeting, Demo, Follow-up, Other — each shown in a different colour.</p>
+    </div>
+
+    <div id="reports" class="card help-section">
+      <h2>Reports</h2>
+      <ul>
+        <li><strong>Lead Funnel</strong> — Visual breakdown of leads at each stage with average time spent.</li>
+        <li><strong>Source Performance</strong> — Which marketing channels drive the most conversions.</li>
+        <li><strong>Team Performance</strong> — How Skye, Tony, and Unassigned leads compare.</li>
+        <li><strong>Activity Report</strong> — Full audit log of all CRM activity, filterable by user and date.</li>
+        <li><strong>Funnel Leak Analysis</strong> — Where leads are dropping out of the funnel.</li>
+      </ul>
+    </div>
+
+    <div id="api" class="card help-section">
+      <h2>API</h2>
+      <h3>Webhook — Create a Lead</h3>
+      <p>POST to <code class="code-inline">/api/webhook/lead</code> with a JSON body. No authentication required for the webhook endpoint.</p>
+      <pre class="code-block">curl -X POST https://your-crm.agrichain.com/api/webhook/lead \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Jane Smith",
+    "company": "FarmCo",
+    "country": "Australia",
+    "email": "jane@farmco.com",
+    "phone": "+61400000000",
+    "message": "Interested in grain tracking",
+    "source_channel": "Homepage",
+    "source_url": "https://agrichain.com/features/grain-tracking"
+  }'</pre>
+      <h3>Authenticated REST API</h3>
+      <p>All other API endpoints require HTTP Basic Auth using your CRM username and password.</p>
+      <pre class="code-block">GET /api/leads
+GET /api/leads/:id
+POST /api/leads
+PATCH /api/leads/:id
+PATCH /api/leads/:id/status
+POST /api/leads/:id/notes
+DELETE /api/leads/:id
+
+GET /api/contacts
+POST /api/contacts
+GET /api/contacts/:id
+PATCH /api/contacts/:id
+
+GET /api/companies
+POST /api/companies
+GET /api/companies/:id
+PATCH /api/companies/:id</pre>
+    </div>
+
+    <div id="slack" class="card help-section">
+      <h2>Slack Integration</h2>
+      <h3>Setup</h3>
+      <ol>
+        <li>In Slack, go to <strong>Apps → Incoming Webhooks → Add to Slack</strong>.</li>
+        <li>Choose the channel you want notifications posted to.</li>
+        <li>Copy the Webhook URL.</li>
+        <li>In AgriChain CRM, go to <strong>Settings → Integrations</strong>.</li>
+        <li>Paste the URL and click <strong>Save Webhook</strong>.</li>
+        <li>Click <strong>Test Slack</strong> to verify it works.</li>
+      </ol>
+      <h3>What triggers Slack notifications?</h3>
+      <ul>
+        <li>New lead created</li>
+        <li>Lead marked Close Won</li>
+        <li>Lead marked Close Lost (includes reason)</li>
+        <li>Daily 9:00 AM breach alert for leads not updated in 7+ days</li>
+      </ul>
+    </div>
+
+  </div>
+</div>
+{% endblock %}
