@@ -279,6 +279,18 @@ def bulk_action():
         flash(f'Pipeline "{pipeline_name}" created with {len(companies)} company(ies).', 'success')
         return redirect(url_for('pipelines.detail', pipeline_id=pipeline.id))
 
+    elif action == 'delete':
+        if current_user.role != 'admin':
+            flash('Only admins can delete companies.', 'error')
+            return redirect(url_for('companies.index'))
+        companies = Company.query.filter(Company.id.in_(ids)).all()
+        count = len(companies)
+        for co in companies:
+            db.session.delete(co)
+        db.session.commit()
+        flash(f'{count} company(ies) deleted.', 'success')
+        return redirect(url_for('companies.index'))
+
     flash('Unknown action.', 'error')
     return redirect(url_for('companies.index'))
 

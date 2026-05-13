@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from flask import Blueprint, render_template, redirect, url_for, flash, request, jsonify, current_app
 from flask_login import login_required, current_user
 from models import Lead, LeadNote, LeadStageHistory, LeadStatusFeedback, Contact, Company, Task, CalendarEvent, ActivityLog
@@ -51,6 +51,13 @@ def _template_ctx():
     )
 
 
+_TF_DAYS = {'7d': 7, '30d': 30, '3m': 91, '6m': 182, '12m': 365}
+_TF_LABELS = {
+    '7d': 'Last 7 Days', '30d': 'Last 30 Days', '3m': 'Last 3 Months',
+    '6m': 'Last 6 Months', '12m': 'Last 12 Months', 'all': 'All Time',
+}
+
+
 @leads_bp.route('/leads')
 @login_required
 def index():
@@ -63,6 +70,18 @@ def index():
     date_from = request.args.get('date_from', '')
     date_to = request.args.get('date_to', '')
     select_mode = request.args.get('select', '0') == '1'
+
+    # ── Timeframe support ─────────────────────────────────────
+    timeframe = request.args.get('timeframe', '')
+    timeframe_label = _TF_LABELS.get(timeframe, '')
+    now = datetime.utcnow()
+    tf_dt_from = None
+
+    if timeframe in _TF_DAYS:
+        tf_dt_from = now - timedelta(days=_TF_DAYS[timeframe])
+        if not date_from:   # don't override a manually-set date filter
+            date_from = tf_dt_from.strftime('%Y-%m-%d')
+    # 'all' → no date filter applied
 
     query = Lead.query
     if search:
@@ -92,11 +111,27 @@ def index():
 
     leads = query.order_by(Lead.created_at.desc()).paginate(page=page, per_page=25, error_out=False)
 
-    funnel_data = [{'stage': s, 'count': Lead.query.filter_by(status=s).count()} for s in ALL_STATUSES]
+    # ── Funnel + stats (timeframe-aware) ─────────────────────
+    def sq():
+        q = Lead.query
+        if tf_dt_from:
+            q = q.filter(Lead.created_at >= tf_dt_from)
+        return q
+
+    funnel_data = [
+        {'stage': s, 'count': sq().filter_by(status=s).count()}
+        for s in ALL_STATUSES
+    ]
     users = db.session.execute(db.select(db.distinct(Lead.assigned_to))).scalars().all()
 
     from models import Pipeline
     pipelines = Pipeline.query.order_by(Pipeline.name).all()
+
+    # Lead stats for top cards (timeframe-aware)
+    total_leads   = sq().count()
+    skye_leads    = sq().filter_by(assigned_to='Skye').count()
+    tony_leads    = sq().filter_by(assigned_to='Tony').count()
+    pending_leads = sq().filter_by(assigned_to='Unassigned').count()
 
     ctx = _template_ctx()
     ctx.update(
@@ -112,6 +147,12 @@ def index():
         select_mode=select_mode,
         users=users,
         pipelines=pipelines,
+        total_leads=total_leads,
+        skye_leads=skye_leads,
+        tony_leads=tony_leads,
+        pending_leads=pending_leads,
+        timeframe=timeframe,
+        timeframe_label=timeframe_label,
     )
     return render_template('leads/index.html', **ctx)
 

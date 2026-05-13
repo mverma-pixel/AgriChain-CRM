@@ -1,17 +1,62 @@
 {% extends "base.html" %}
 {% block title %}Leads — AgriChain CRM{% endblock %}
 {% block content %}
-<div class="page-header">
-  <h1 class="page-title">Leads</h1>
-  <div style="display:flex;gap:0.5rem;">
+<div class="page-header dash-header">
+  <div>
+    <h1 class="page-title">Leads</h1>
+  </div>
+  <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;margin-left:auto;">
+    <select id="leads-tf" class="tf-select" onchange="handleLeadsTF(this.value)">
+      <option value=""    {% if not timeframe         %}selected{% endif %}>All Time</option>
+      <option value="7d"  {% if timeframe=='7d'  %}selected{% endif %}>Last 7 Days</option>
+      <option value="30d" {% if timeframe=='30d' %}selected{% endif %}>Last 30 Days</option>
+      <option value="3m"  {% if timeframe=='3m'  %}selected{% endif %}>Last 3 Months</option>
+      <option value="6m"  {% if timeframe=='6m'  %}selected{% endif %}>Last 6 Months</option>
+      <option value="12m" {% if timeframe=='12m' %}selected{% endif %}>Last 12 Months</option>
+    </select>
     <button class="btn btn-secondary" onclick="openModal('import-leads-modal')">Import CSV</button>
     <button class="btn btn-primary" onclick="openModal('add-lead-modal')">+ Add Lead</button>
+  </div>
+</div>
+
+<!-- Lead Stats -->
+{% set stat_period = timeframe_label if timeframe_label else 'All Time' %}
+<div class="stats-row" style="margin-bottom:1.5rem;">
+  <div class="stat-card stat-card-gradient stat-hover">
+    <div class="stat-card-body">
+      <div class="stat-value" data-count="{{ total_leads }}">{{ total_leads }}</div>
+      <div class="stat-label">Total Leads</div>
+      <div class="stat-sub">{{ stat_period }}</div>
+    </div>
+    <svg class="stat-icon" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.4)" stroke-width="1.5"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+  </div>
+  <div class="stat-card stat-card-border-blue stat-hover">
+    <div class="stat-card-body">
+      <div class="stat-label-top">Assigned to Skye</div>
+      <div class="stat-value stat-value-dark" data-count="{{ skye_leads }}">{{ skye_leads }}</div>
+      <div class="stat-sub">{{ stat_period }} &nbsp;·&nbsp; AU &amp; NZ</div>
+    </div>
+  </div>
+  <div class="stat-card stat-card-border-blue stat-hover">
+    <div class="stat-card-body">
+      <div class="stat-label-top">Assigned to Tony</div>
+      <div class="stat-value stat-value-dark" data-count="{{ tony_leads }}">{{ tony_leads }}</div>
+      <div class="stat-sub">{{ stat_period }} &nbsp;·&nbsp; US &amp; CA</div>
+    </div>
+  </div>
+  <div class="stat-card stat-card-border-yellow stat-hover">
+    <div class="stat-card-body">
+      <div class="stat-label-top">Pending Leads</div>
+      <div class="stat-value stat-value-dark" data-count="{{ pending_leads }}">{{ pending_leads }}</div>
+      <div class="stat-sub">{{ stat_period }}</div>
+    </div>
   </div>
 </div>
 
 <!-- Filters -->
 <div class="card filter-bar">
   <form method="GET" action="{{ url_for('leads.index') }}" class="filter-form">
+    {% if timeframe %}<input type="hidden" name="timeframe" value="{{ timeframe }}"/>{% endif %}
     <input type="text" name="search" value="{{ search }}" placeholder="Search name, company, email…" class="form-input filter-input"/>
     <select name="status" class="form-select filter-select">
       <option value="">All Statuses</option>
@@ -537,4 +582,24 @@ function togglePipelineMode() {
     </form>
   </div>
 </div>
+<script>
+function handleLeadsTF(val) {
+  const url = new URL(window.location.href);
+  if (val) { url.searchParams.set('timeframe', val); } else { url.searchParams.delete('timeframe'); }
+  url.searchParams.delete('page');
+  window.location.href = url.toString();
+}
+function animateCount(el) {
+  const target = parseFloat(el.dataset.count);
+  if (isNaN(target) || target === 0) return;
+  const dur = 600, t0 = performance.now();
+  function tick(now) {
+    const p = Math.min((now - t0) / dur, 1);
+    el.textContent = Math.round(target * (1 - Math.pow(1 - p, 3)));
+    if (p < 1) requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+}
+document.querySelectorAll('[data-count]').forEach(animateCount);
+</script>
 {% endblock %}

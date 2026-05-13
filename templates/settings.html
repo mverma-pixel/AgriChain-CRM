@@ -132,9 +132,71 @@
     </div>
   </div>
 
-  <!-- Slack Integration -->
-  <div class="settings-section">
+  <!-- Integrations -->
+  <div class="settings-section" id="ga-settings">
     <h2 class="settings-section-title">Integrations <span class="badge badge-admin">Admin</span></h2>
+
+    <!-- Google Analytics -->
+    <div class="card settings-card" style="margin-bottom:1rem;">
+      <div class="settings-card-header">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="settings-icon"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+        <div style="flex:1;">
+          <div style="display:flex;align-items:center;gap:0.6rem;">
+            <h3 style="margin:0;">Google Analytics 4</h3>
+            {% if ga_configured %}
+              <span class="ga-badge ga-badge-on" style="font-size:0.72rem;">● Connected</span>
+            {% else %}
+              <span class="ga-badge ga-badge-off" style="font-size:0.72rem;">○ Not Connected</span>
+            {% endif %}
+          </div>
+          <p>Connect GA4 to show real website user counts on the Dashboard "Users Over Time" chart.</p>
+        </div>
+      </div>
+      <div class="settings-card-body">
+
+        <!-- How-to steps -->
+        <div class="ga-howto">
+          <div class="ga-step"><span class="ga-step-num">1</span><span>Go to <strong>Google Cloud Console</strong> → IAM &amp; Admin → Service Accounts → Create Service Account</span></div>
+          <div class="ga-step"><span class="ga-step-num">2</span><span>Create a key (JSON type) — download the file to your computer</span></div>
+          <div class="ga-step"><span class="ga-step-num">3</span><span>Go to <strong>GA4 Admin</strong> → Property Access Management → Add the service account email as Viewer</span></div>
+          <div class="ga-step"><span class="ga-step-num">4</span><span>Find your <strong>GA4 Property ID</strong> in GA4 Admin → Property Settings (numeric, e.g. 123456789)</span></div>
+          <div class="ga-step"><span class="ga-step-num">5</span><span>Paste the Property ID below and upload the JSON key file, then click Save</span></div>
+        </div>
+
+        <form method="POST" action="{{ url_for('settings.save_ga') }}" enctype="multipart/form-data">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+          <div class="form-row" style="margin-bottom:0.75rem;">
+            <div class="form-group">
+              <label class="form-label">GA4 Property ID</label>
+              <input type="text" name="ga_property_id" class="form-input"
+                     value="{{ ga_property }}" placeholder="e.g. 123456789"
+                     pattern="[0-9]+" title="Numeric Property ID only"/>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Service Account JSON Key</label>
+              <input type="file" name="ga_credentials_file" class="form-input" accept=".json"/>
+              {% if ga_creds %}
+              <div class="text-sm text-muted" style="margin-top:4px;">
+                Current: <code class="code-inline">{{ ga_creds | replace('\\', '/') | split('/') | last }}</code>
+                — upload a new file to replace it
+              </div>
+              {% endif %}
+            </div>
+          </div>
+          <div style="display:flex;gap:0.5rem;align-items:center;">
+            <button type="submit" class="btn btn-secondary">Save GA Settings</button>
+            {% if ga_configured %}
+            <form method="POST" action="{{ url_for('settings.test_ga') }}" style="display:inline;">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+              <button type="submit" class="btn btn-ghost">Test Connection</button>
+            </form>
+            {% endif %}
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Slack -->
     <div class="card settings-card">
       <div class="settings-card-header">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="settings-icon"><path d="M18 8h1a4 4 0 0 1 0 8h-1"/><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"/><line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/></svg>

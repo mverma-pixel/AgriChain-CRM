@@ -24,8 +24,14 @@ def admin_required(f):
 @login_required
 def index():
     users = User.query.order_by(User.created_at).all() if current_user.role == 'admin' else []
-    slack_url = current_app.config.get('SLACK_WEBHOOK_URL', '')
-    return render_template('settings.html', users=users, slack_url=slack_url)
+    slack_url   = current_app.config.get('SLACK_WEBHOOK_URL', '')
+    ga_property = os.environ.get('GA_PROPERTY_ID', '')
+    ga_creds    = os.environ.get('GA_CREDENTIALS_FILE', '')
+    from ga_client import ga_is_configured
+    ga_configured = ga_is_configured()
+    return render_template('settings.html', users=users, slack_url=slack_url,
+                           ga_property=ga_property, ga_creds=ga_creds,
+                           ga_configured=ga_configured)
 
 
 # ── Profile ────────────────────────────────────────────────
@@ -137,6 +143,71 @@ def reset_user_password(user_id):
     db.session.commit()
     flash(f'Password for "{user.username}" reset.', 'success')
     return redirect(url_for('settings.index'))
+
+
+# ── Google Analytics ───────────────────────────────────
+
+def _update_env_var(key, value):
+    """Write/update a key=value line in .env, live-update os.environ too."""
+    env_path = os.path.join(current_app.root_path, '.env')
+    lines = []
+    found = False
+    if os.path.exists(env_path):
+        with open(env_path, 'r') as f:
+            lines = f.readlines()
+        new_lines = []
+        for line in lines:
+            if line.startswith(f'{key}='):
+                new_lines.append(f'{key}={value}\n')
+                found = True
+            else:
+                new_lines.append(line)
+        lines = new_lines
+    if not found:
+        lines.append(f'{key}={value}\n')
+    with open(env_path, 'w') as f:
+        f.writelines(lines)
+    os.environ[key] = value
+
+
+@settings_bp.route('/settings/ga/save', methods=['POST'])
+@login_required
+@admin_required
+def save_ga():
+    import json as _json
+    property_id = request.form.get('ga_property_id', '').strip()
+    creds_file  = request.files.get('ga_credentials_file')
+
+    if property_id:
+        _update_env_var('GA_PROPERTY_ID', property_id)
+
+    if creds_file and creds_file.filename:
+        raw = creds_file.read()
+        try:
+            _json.loads(raw)  # validate it's proper JSON
+        except ValueError:
+            flash('Invalid credentials file — must be a valid JSON service-account key.', 'error')
+            return redirect(url_for('settings.index') + '#ga-settings')
+
+        instance_dir = os.path.join(current_app.root_path, 'instance')
+        os.makedirs(instance_dir, exist_ok=True)
+        save_path = os.path.join(instance_dir, 'ga_credentials.json')
+        with open(save_path, 'wb') as fh:
+            fh.write(raw)
+        _update_env_var('GA_CREDENTIALS_FILE', save_path)
+
+    flash('Google Analytics settings saved.', 'success')
+    return redirect(url_for('settings.index') + '#ga-settings')
+
+
+@settings_bp.route('/settings/ga/test', methods=['POST'])
+@login_required
+@admin_required
+def test_ga():
+    from ga_client import test_ga_connection
+    ok, msg = test_ga_connection()
+    flash(msg, 'success' if ok else 'error')
+    return redirect(url_for('settings.index') + '#ga-settings')
 
 
 # ── Slack ──────────────────────────────────────────────────
